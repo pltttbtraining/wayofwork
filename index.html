@@ -1,0 +1,817 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Calculator, BookOpen, CheckCircle, AlertCircle, RefreshCw, ChevronDown, ArrowLeft, Save, Edit3, Lock, Zap } from 'lucide-react';
+
+// --- CONSTANTS & MOCK DATA ---
+const FORM_TYPES = {
+  KEY_DRIVER: 'KeyDriver',
+  ACTION_PLAN: 'ActionPlan',
+  SALES_ACTIVITY: 'SalesActivity'
+};
+
+const ROLES = ['IS', 'IA', 'LA', 'IS Commercial'];
+
+const generateScenarios = () => {
+  const scenarios = [];
+  for (let i = 0; i < 10; i++) {
+    const target = Math.round((Math.random() * 5000000) + 1000000);
+    const successCount = Math.floor(Math.random() * 5) + 1;
+    const nonSuccessCount = Math.floor(Math.random() * 5) + 1;
+    const successAPE = Math.round((Math.random() * 100000) + 50000);
+    const nonSuccessAPE = Math.round((Math.random() * 30000) + 10000);
+    
+    const leads = Math.floor(Math.random() * 50) + 20;
+    const meets = Math.floor(leads * (0.6 + Math.random() * 0.2)); 
+    const presents = Math.floor(meets * (0.7 + Math.random() * 0.2));
+    const closes = Math.max(1, Math.floor(presents * (0.5 + Math.random() * 0.3))); 
+    
+    const avgPremium = Math.round((Math.random() * 20000) + 10000);
+    const apeSubmit = closes * avgPremium;
+    const issueRate = 0.8 + (Math.random() * 0.15);
+    const apeIssue = Math.floor(apeSubmit * issueRate);
+
+    scenarios.push({
+      id: i,
+      target,
+      successCount,
+      nonSuccessCount,
+      successAPE, 
+      nonSuccessAPE,
+      leads,
+      meets,
+      presents,
+      closes,
+      avgPremium,
+      apeSubmit,
+      apeIssue
+    });
+  }
+  return scenarios;
+};
+
+const MOCK_SCENARIOS = generateScenarios();
+
+// --- UI COMPONENTS ---
+
+const LoadingScreen = ({ onStart }) => (
+  <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#002d63] to-[#005099] text-white p-6 relative overflow-hidden">
+    <div className="absolute top-0 left-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl"></div>
+    <div className="absolute bottom-0 right-0 w-96 h-96 bg-orange-500 opacity-10 rounded-full translate-x-1/3 translate-y-1/3 blur-3xl"></div>
+
+    <div className="relative z-10 flex flex-col items-center">
+      <div className="mb-8 p-4 bg-white rounded-2xl shadow-2xl animate-fade-in-up">
+        <div className="text-[#002d63] font-bold text-4xl tracking-tighter">ttb</div>
+      </div>
+      
+      <h1 className="text-3xl font-bold mb-2 text-center drop-shadow-md">Performance Planner</h1>
+      <p className="text-blue-100 mb-12 text-center font-light tracking-wide">Training & Calculation System</p>
+      
+      <div className="w-64 space-y-3">
+        <div className="h-1.5 bg-blue-900/30 rounded-full overflow-hidden backdrop-blur-sm">
+          <div className="h-full bg-gradient-to-r from-orange-400 to-orange-600 animate-[width_1.5s_ease-in-out_infinite]" style={{width: '100%'}}></div>
+        </div>
+        <p className="text-center text-xs text-blue-200 opacity-80 animate-pulse">Initializing System...</p>
+      </div>
+
+      <button 
+        onClick={onStart}
+        className="mt-16 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 px-10 rounded-full shadow-lg shadow-orange-900/20 transform transition active:scale-95 flex items-center gap-3 animate-bounce-subtle cursor-pointer z-50"
+      >
+        <Play size={24} fill="currentColor" />
+        <span className="text-lg">เข้าสู่ระบบ</span>
+      </button>
+    </div>
+    
+    <div className="absolute bottom-6 text-[10px] text-blue-300 opacity-60 font-mono">
+      v2.0.1 Production (Hotfix) | ttb Training Team
+    </div>
+  </div>
+);
+
+const InputField = ({ 
+  label, value, onChange, type = "text", 
+  variant = "default",
+  placeholder = "", highlight = false, unit = "", icon: Icon 
+}) => {
+  let baseStyle = "w-full p-3 border rounded-xl transition-all duration-200 outline-none font-medium text-base ";
+  let wrapperStyle = "relative group";
+  
+  if (variant === 'readonly') {
+    baseStyle += "bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-none";
+  } else if (variant === 'calculated') {
+    baseStyle += "bg-blue-50 text-blue-800 border-blue-200 font-bold shadow-inner";
+  } else {
+    baseStyle += "bg-white text-gray-800 border-gray-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 shadow-sm";
+  }
+
+  if (highlight) {
+    baseStyle += " border-red-500 bg-red-50 text-red-700 animate-shake";
+  }
+
+  return (
+    <div className="mb-4">
+      <label className="block text-xs font-semibold text-gray-500 mb-1.5 ml-1 uppercase tracking-wide">
+        {label}
+      </label>
+      <div className={wrapperStyle}>
+        <input
+          type={type}
+          inputMode={type === 'number' ? 'decimal' : 'text'}
+          value={value}
+          onChange={variant === 'default' ? onChange : undefined}
+          readOnly={variant !== 'default'}
+          placeholder={placeholder}
+          className={baseStyle}
+        />
+        <div className="absolute right-3 top-3 text-gray-400 pointer-events-none flex items-center gap-1">
+          {unit && <span className="text-xs font-medium text-gray-500">{unit}</span>}
+          {variant === 'readonly' && <Lock size={14} className="opacity-50"/>}
+          {variant === 'calculated' && <Zap size={14} className="text-orange-400 fill-orange-400"/>}
+          {variant === 'default' && !unit && <Edit3 size={14} className="opacity-0 group-focus-within:opacity-30 transition-opacity"/>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SectionHeader = ({ title, color = "blue", icon: Icon }) => (
+  <div className={`flex items-center gap-2 mb-4 mt-6 pb-2 border-b-2 border-${color}-100`}>
+    {Icon && <Icon size={20} className={`text-${color}-600`} />}
+    <h3 className={`text-${color}-900 font-bold text-lg`}>{title}</h3>
+  </div>
+);
+
+// --- SEPARATED SCREEN COMPONENTS (Fixes Hooks Issue) ---
+
+const ModeSelectionScreen = ({ onSelectMode }) => {
+  const [passcode, setPasscode] = useState('');
+  const [isPasscodeMode, setIsPasscodeMode] = useState(false);
+  const [error, setError] = useState('');
+
+  const verifyPasscode = () => {
+    if (passcode === '54321') {
+      onSelectMode('calculator');
+    } else {
+      setError('รหัสผ่านไม่ถูกต้อง');
+      setPasscode('');
+    }
+  };
+
+  if (isPasscodeMode) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm animate-fade-in-up">
+          <h2 className="text-xl font-bold text-blue-900 mb-6 text-center">Enter Passcode</h2>
+          <div className="flex justify-center mb-6">
+            <div className="p-4 bg-blue-50 rounded-full text-blue-600">
+              <Lock size={32} />
+            </div>
+          </div>
+          <input 
+            type="password" inputMode="numeric"
+            value={passcode}
+            onChange={(e) => {setPasscode(e.target.value); setError('');}}
+            className="w-full text-center text-3xl tracking-[0.5em] border-2 border-gray-200 rounded-xl p-4 mb-2 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+            placeholder="•••••" maxLength={5} autoFocus
+          />
+          <p className={`text-red-500 text-sm text-center mb-6 h-5 ${error ? 'opacity-100' : 'opacity-0'}`}>{error}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => setIsPasscodeMode(false)} className="py-3 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors">ยกเลิก</button>
+            <button onClick={verifyPasscode} className="py-3 text-white bg-blue-600 hover:bg-blue-700 rounded-xl font-bold shadow-lg shadow-blue-200 transition-colors">ยืนยัน</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center pb-20">
+      <div className="w-full max-w-md space-y-6 mt-8 animate-fade-in">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-blue-900">เลือกโหมดการทำงาน</h2>
+          <p className="text-gray-500">Select working mode</p>
+        </div>
+        
+        <button 
+          onClick={() => onSelectMode('training')}
+          className="w-full bg-white p-6 rounded-2xl shadow-lg border border-orange-100 flex items-center gap-5 hover:shadow-xl hover:scale-[1.02] transition-all group relative overflow-hidden"
+        >
+          <div className="absolute left-0 top-0 bottom-0 w-2 bg-orange-500"></div>
+          <div className="bg-orange-100 p-4 rounded-full group-hover:bg-orange-500 group-hover:text-white transition-colors text-orange-600">
+            <BookOpen size={32} />
+          </div>
+          <div className="text-left flex-1">
+            <h3 className="text-xl font-bold text-gray-800 group-hover:text-orange-600 transition-colors">Training Mode</h3>
+            <p className="text-sm text-gray-500">ฝึกคำนวณและกรอกฟอร์ม (สุ่มโจทย์)</p>
+          </div>
+          <ChevronDown className="-rotate-90 text-gray-300 group-hover:text-orange-500" />
+        </button>
+
+        <button 
+          onClick={() => setIsPasscodeMode(true)}
+          className="w-full bg-white p-6 rounded-2xl shadow-lg border border-blue-100 flex items-center gap-5 hover:shadow-xl hover:scale-[1.02] transition-all group relative overflow-hidden"
+        >
+          <div className="absolute left-0 top-0 bottom-0 w-2 bg-blue-600"></div>
+          <div className="bg-blue-100 p-4 rounded-full group-hover:bg-blue-600 group-hover:text-white transition-colors text-blue-600">
+            <Calculator size={32} />
+          </div>
+          <div className="text-left flex-1">
+            <h3 className="text-xl font-bold text-gray-800 group-hover:text-blue-600 transition-colors">Working Mode</h3>
+            <p className="text-sm text-gray-500">เครื่องมือช่วยคำนวณ (Passcode)</p>
+          </div>
+          <ChevronDown className="-rotate-90 text-gray-300 group-hover:text-blue-600" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const FormSelectionScreen = ({ mode, onSelectForm, onBack }) => (
+  <div className="min-h-screen bg-gray-50 p-6">
+    <div className="flex items-center mb-8 pt-4">
+       <button onClick={onBack} className="p-3 mr-4 bg-white shadow rounded-full hover:bg-gray-100 transition"><ArrowLeft size={20} className="text-gray-700"/></button>
+       <div>
+          <h2 className="text-xl font-bold text-blue-900 leading-tight">เลือกแบบฟอร์ม</h2>
+          <span className="text-sm text-gray-500 capitalize">{mode} Mode</span>
+       </div>
+    </div>
+    
+    <div className="grid gap-5 max-w-md mx-auto">
+      {Object.values(FORM_TYPES).map(type => (
+        <div key={type} className="bg-white rounded-2xl shadow-md p-5 border border-gray-100">
+           <h3 className="text-lg font-bold text-gray-800 mb-4 border-l-4 border-orange-500 pl-3">{type.replace(/([A-Z])/g, ' $1').trim()}</h3>
+           <div className="grid grid-cols-2 gap-2">
+              {ROLES.map(r => (
+                 <button 
+                  key={r}
+                  onClick={() => onSelectForm(type, r)}
+                  className="text-sm py-2.5 px-3 bg-slate-50 text-slate-600 rounded-lg hover:bg-blue-600 hover:text-white hover:shadow-md transition-all font-medium border border-slate-100"
+                 >
+                   {r}
+                 </button>
+              ))}
+           </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+// --- MAIN APP LOGIC ---
+
+export default function App() {
+  const [screen, setScreen] = useState('loading');
+  const [mode, setMode] = useState('training');
+  const [formType, setFormType] = useState(FORM_TYPES.KEY_DRIVER);
+  const [role, setRole] = useState('IA');
+  
+  // Data State
+  const [scenario, setScenario] = useState(null);
+  const [formData, setFormData] = useState({});
+  const [validationResult, setValidationResult] = useState(null);
+
+  const startForm = (selectedType, selectedRole) => {
+    setFormType(selectedType);
+    setRole(selectedRole);
+    setValidationResult(null);
+    setFormData({});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (mode === 'training') {
+      const newScenario = MOCK_SCENARIOS[Math.floor(Math.random() * MOCK_SCENARIOS.length)];
+      setScenario(newScenario);
+      
+      const initialData = {
+        name: "Test User",
+        zone: "BKK-1",
+        rh: "Manager A",
+        target: newScenario.target,
+        success_count: newScenario.successCount,
+        success_ape_per_head: newScenario.successAPE,
+        nonsuccess_count: newScenario.nonSuccessCount,
+        nonsuccess_ape_per_head: newScenario.nonSuccessAPE,
+        leads: newScenario.leads,
+        meets: newScenario.meets,
+        presents: newScenario.presents,
+        closes: newScenario.closes,
+        ape_issue: newScenario.apeIssue,
+        ape_submit: newScenario.apeSubmit,
+      };
+      setFormData(initialData);
+
+    } else {
+      setScenario(null);
+      setFormData({});
+    }
+    setScreen('form');
+  };
+
+  const handleInputChange = (field, value) => {
+    const newData = { ...formData, [field]: value };
+    setFormData(newData);
+    
+    if (mode === 'calculator') {
+      const safeFloat = (v) => parseFloat(String(v).replace(/,/g,'')) || 0;
+      
+      if (formType === FORM_TYPES.KEY_DRIVER || formType === FORM_TYPES.ACTION_PLAN) {
+        const s_count = safeFloat(newData.success_count);
+        const s_ape = safeFloat(newData.success_ape_per_head);
+        const n_count = safeFloat(newData.nonsuccess_count);
+        const n_ape = safeFloat(newData.nonsuccess_ape_per_head);
+        const target = safeFloat(newData.target);
+
+        const s_total = s_count * s_ape;
+        const n_total = n_count * n_ape;
+        const total_ape = s_total + n_total;
+        const total_people = s_count + n_count;
+        const s_percent = total_people > 0 ? (s_count / total_people) * 100 : 0;
+        const n_percent = total_people > 0 ? (n_count / total_people) * 100 : 0;
+        const ach = target > 0 ? (total_ape / target) * 100 : 0;
+
+        setFormData(prev => ({
+          ...prev,
+          [field]: value,
+          success_total_ape: s_total > 0 ? s_total : '',
+          nonsuccess_total_ape: n_total > 0 ? n_total : '',
+          success_percent: s_percent > 0 ? s_percent.toFixed(1) : '',
+          nonsuccess_percent: n_percent > 0 ? n_percent.toFixed(1) : '',
+          total_ape: total_ape > 0 ? total_ape : '',
+          ach_target_percent: ach > 0 ? ach.toFixed(2) : ''
+        }));
+      }
+
+      if (formType === FORM_TYPES.SALES_ACTIVITY) {
+        const leads = safeFloat(newData.leads);
+        const meets = safeFloat(newData.meets);
+        const presents = safeFloat(newData.presents);
+        const closes = safeFloat(newData.closes);
+        const ape_issue = safeFloat(newData.ape_issue);
+        const ape_submit = safeFloat(newData.ape_submit);
+
+        const conv_lead_meet = leads > 0 ? (meets / leads) * 100 : 0;
+        const conv_meet_present = meets > 0 ? (presents / meets) * 100 : 0;
+        const conv_present_close = presents > 0 ? (closes / presents) * 100 : 0;
+        const issue_rate = ape_submit > 0 ? (ape_issue / ape_submit) * 100 : 0;
+        const avg_prem = closes > 0 ? (ape_submit / closes) : 0;
+
+        setFormData(prev => ({
+          ...prev,
+          [field]: value,
+          conv_lead_meet: conv_lead_meet > 0 ? conv_lead_meet.toFixed(0) : '',
+          conv_meet_present: conv_meet_present > 0 ? conv_meet_present.toFixed(0) : '',
+          conv_present_close: conv_present_close > 0 ? conv_present_close.toFixed(0) : '',
+          issue_rate: issue_rate > 0 ? issue_rate.toFixed(1) : '',
+          avg_premium: avg_prem > 0 ? avg_prem.toFixed(0) : ''
+        }));
+      }
+    }
+  };
+
+  const validateTraining = () => {
+    const safeFloat = (v) => parseFloat(String(v).replace(/,/g,'')) || 0;
+    let errors = {};
+    let isCorrect = true;
+
+    const isClose = (a, b) => Math.abs(a - b) < 0.5;
+
+    if (formType === FORM_TYPES.KEY_DRIVER || formType === FORM_TYPES.ACTION_PLAN) {
+      const s_total = safeFloat(formData.success_count) * safeFloat(formData.success_ape_per_head);
+      const n_total = safeFloat(formData.nonsuccess_count) * safeFloat(formData.nonsuccess_ape_per_head);
+      const total_ape = s_total + n_total;
+      const total_people = safeFloat(formData.success_count) + safeFloat(formData.nonsuccess_count);
+      const s_perc = (safeFloat(formData.success_count) / total_people) * 100;
+      const ach = (total_ape / safeFloat(formData.target)) * 100;
+
+      if (!isClose(safeFloat(formData.success_total_ape), s_total)) errors.success_total_ape = `ที่ถูกต้อง: ${s_total.toLocaleString()}`;
+      if (!isClose(safeFloat(formData.nonsuccess_total_ape), n_total)) errors.nonsuccess_total_ape = `ที่ถูกต้อง: ${n_total.toLocaleString()}`;
+      if (!isClose(safeFloat(formData.total_ape), total_ape)) errors.total_ape = `ที่ถูกต้อง: ${total_ape.toLocaleString()}`;
+      if (!isClose(safeFloat(formData.success_percent), s_perc)) errors.success_percent = `ที่ถูกต้อง: ${s_perc.toFixed(1)}%`;
+      if (!isClose(safeFloat(formData.ach_target_percent), ach)) errors.ach_target_percent = `ที่ถูกต้อง: ${ach.toFixed(2)}%`;
+    }
+
+    if (formType === FORM_TYPES.SALES_ACTIVITY) {
+      const c1 = (safeFloat(formData.meets) / safeFloat(formData.leads)) * 100;
+      const c2 = (safeFloat(formData.presents) / safeFloat(formData.meets)) * 100;
+      const c3 = (safeFloat(formData.closes) / safeFloat(formData.presents)) * 100;
+      const issue_rate = (safeFloat(formData.ape_issue) / safeFloat(formData.ape_submit)) * 100;
+
+      if (!isClose(safeFloat(formData.conv_lead_meet), c1)) errors.conv_lead_meet = `ที่ถูกต้อง: ${c1.toFixed(0)}%`;
+      if (!isClose(safeFloat(formData.conv_meet_present), c2)) errors.conv_meet_present = `ที่ถูกต้อง: ${c2.toFixed(0)}%`;
+      if (!isClose(safeFloat(formData.conv_present_close), c3)) errors.conv_present_close = `ที่ถูกต้อง: ${c3.toFixed(0)}%`;
+      if (!isClose(safeFloat(formData.issue_rate), issue_rate)) errors.issue_rate = `ที่ถูกต้อง: ${issue_rate.toFixed(1)}%`;
+    }
+
+    if (Object.keys(errors).length > 0) isCorrect = false;
+    setValidationResult({ isCorrect, errors });
+  };
+
+  // --- RENDER MAIN ---
+  if (screen === 'loading') return <LoadingScreen onStart={() => setScreen('menu')} />;
+  
+  if (screen === 'menu') return (
+    <ModeSelectionScreen 
+      onSelectMode={(m) => { setMode(m); setScreen('select_form'); }} 
+    />
+  );
+  
+  if (screen === 'select_form') return (
+    <FormSelectionScreen 
+      mode={mode}
+      onSelectForm={startForm}
+      onBack={() => setScreen('menu')}
+    />
+  );
+
+  // --- FORM RENDER ---
+  const isTraining = mode === 'training';
+  const isCalc = mode === 'calculator';
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-32">
+      {/* Top Navbar */}
+      <div className="bg-white/80 backdrop-blur-md text-blue-900 p-4 sticky top-0 z-20 border-b border-gray-200 shadow-sm">
+         <div className="flex justify-between items-center max-w-2xl mx-auto">
+            <button onClick={() => setScreen('select_form')} className="p-2 hover:bg-gray-100 rounded-full transition"><ArrowLeft size={24}/></button>
+            <div className="text-center">
+              <h1 className="font-bold text-lg leading-none">{formType.replace(/([A-Z])/g, ' $1')}</h1>
+              <p className="text-[10px] text-gray-500 mt-1 font-medium bg-gray-100 px-2 py-0.5 rounded-full inline-block">
+                {role} • {isTraining ? 'Training' : 'Calculator'}
+              </p>
+            </div>
+            <div className="w-8"></div>
+         </div>
+      </div>
+
+      {/* Scenario Box (Only for Training) */}
+      {isTraining && scenario && (
+        <div className="bg-gradient-to-r from-orange-50 to-white p-5 border-b border-orange-100 shadow-inner">
+           <div className="max-w-2xl mx-auto">
+             <div className="flex items-start gap-3">
+                <div className="bg-orange-100 p-2 rounded-lg text-orange-600 mt-1"><BookOpen size={20}/></div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-orange-900 text-sm uppercase tracking-wide mb-2">Scenario / โจทย์</h3>
+                  <div className="bg-white p-3 rounded-xl border border-orange-100 text-sm text-gray-700 space-y-1 shadow-sm">
+                     <p><span className="font-semibold text-gray-900">Target:</span> {scenario.target.toLocaleString()}</p>
+                     
+                     {(formType === FORM_TYPES.KEY_DRIVER || formType === FORM_TYPES.ACTION_PLAN) && (
+                       <>
+                         <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-100">
+                            <div>
+                              <p className="text-xs text-green-600 font-bold">Success Group</p>
+                              <p>{scenario.successCount} คน</p>
+                              <p>APE: {scenario.successAPE.toLocaleString()}/คน</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-red-500 font-bold">Non-Success Group</p>
+                              <p>{scenario.nonSuccessCount} คน</p>
+                              <p>APE: {scenario.nonSuccessAPE.toLocaleString()}/คน</p>
+                            </div>
+                         </div>
+                       </>
+                     )}
+                     
+                     {formType === FORM_TYPES.SALES_ACTIVITY && (
+                        <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <p>Lead: <span className="font-bold">{scenario.leads}</span></p>
+                          <p>Meet: <span className="font-bold">{scenario.meets}</span></p>
+                          <p>Present: <span className="font-bold">{scenario.presents}</span></p>
+                          <p>Close: <span className="font-bold">{scenario.closes}</span></p>
+                          <p className="col-span-2 mt-1 pt-1 border-t border-dashed">
+                             APE Issue: {scenario.apeIssue.toLocaleString()} | Submit: {scenario.apeSubmit.toLocaleString()}
+                          </p>
+                        </div>
+                     )}
+                  </div>
+                  <p className="text-xs text-orange-500 mt-2 italic">* กรุณากรอกข้อมูลในช่องว่างให้ถูกต้องตามโจทย์</p>
+                </div>
+             </div>
+           </div>
+        </div>
+      )}
+
+      {/* Main Form Content */}
+      <div className="p-4 max-w-2xl mx-auto space-y-6">
+        
+        {/* Basic Info Section */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+          <SectionHeader title="ข้อมูลพื้นฐาน" icon={Edit3} />
+          <div className="grid grid-cols-2 gap-4">
+            <InputField label="ชื่อพนักงาน" placeholder="ชื่อ-สกุล" variant={isTraining ? 'default' : 'default'} value={formData.name || ''} onChange={e => handleInputChange('name', e.target.value)} />
+            <InputField label="Zone" placeholder="Zone" variant={isTraining ? 'default' : 'default'} value={formData.zone || ''} onChange={e => handleInputChange('zone', e.target.value)} />
+            <div className="col-span-2">
+               <InputField label="Target (เป้าหมาย)" type="number" unit="บาท" 
+                 value={formData.target || ''} 
+                 onChange={(e) => handleInputChange('target', e.target.value)}
+                 variant={isTraining ? 'readonly' : 'default'}
+               />
+            </div>
+          </div>
+        </div>
+
+        {/* --- KEY DRIVER / ACTION PLAN FORM --- */}
+        {(formType === FORM_TYPES.KEY_DRIVER || formType === FORM_TYPES.ACTION_PLAN) && (
+          <>
+            {/* Success Group */}
+            <div className="bg-white p-5 rounded-2xl shadow-sm border-l-4 border-green-500 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-2 opacity-5"><CheckCircle size={100} /></div>
+              <h3 className="text-green-700 font-bold mb-4 flex items-center gap-2 relative z-10 text-lg">
+                 <div className="bg-green-100 p-1.5 rounded-lg"><CheckCircle size={20}/></div> กลุ่ม Success
+              </h3>
+              <div className="grid grid-cols-2 gap-4 relative z-10">
+                 <InputField label="จำนวนคน" type="number" unit="คน" 
+                    value={formData.success_count || ''} onChange={(e) => handleInputChange('success_count', e.target.value)} 
+                    variant={isTraining ? 'readonly' : 'default'}
+                 />
+                 <InputField label="% ของคนทั้งหมด" type="number" unit="%" 
+                    value={formData.success_percent || ''} onChange={(e) => handleInputChange('success_percent', e.target.value)} 
+                    variant={isCalc ? 'calculated' : 'default'}
+                    highlight={validationResult?.errors?.success_percent}
+                 />
+                 <InputField label="APE / คน" type="number" 
+                    value={formData.success_ape_per_head || ''} onChange={(e) => handleInputChange('success_ape_per_head', e.target.value)} 
+                    variant={isTraining ? 'readonly' : 'default'}
+                 />
+                 <InputField label="Total APE (Success)" type="number" 
+                    value={formData.success_total_ape || ''} onChange={(e) => handleInputChange('success_total_ape', e.target.value)} 
+                    variant={isCalc ? 'calculated' : 'default'}
+                    highlight={validationResult?.errors?.success_total_ape}
+                 />
+              </div>
+            </div>
+
+            {/* Non-Success Group */}
+            <div className="bg-white p-5 rounded-2xl shadow-sm border-l-4 border-red-500 relative overflow-hidden">
+               <div className="absolute top-0 right-0 p-2 opacity-5"><AlertCircle size={100} /></div>
+              <h3 className="text-red-700 font-bold mb-4 flex items-center gap-2 relative z-10 text-lg">
+                 <div className="bg-red-100 p-1.5 rounded-lg"><AlertCircle size={20}/></div> กลุ่ม Non-Success
+              </h3>
+              <div className="grid grid-cols-2 gap-4 relative z-10">
+                 <InputField label="จำนวนคน" type="number" unit="คน"
+                   value={formData.nonsuccess_count || ''} onChange={(e) => handleInputChange('nonsuccess_count', e.target.value)} 
+                   variant={isTraining ? 'readonly' : 'default'}
+                 />
+                 <InputField label="% ของคนทั้งหมด" type="number" unit="%"
+                   value={formData.nonsuccess_percent || ''} onChange={(e) => handleInputChange('nonsuccess_percent', e.target.value)} 
+                   variant={isCalc ? 'calculated' : 'default'}
+                 />
+                 <InputField label="APE / คน" type="number"
+                   value={formData.nonsuccess_ape_per_head || ''} onChange={(e) => handleInputChange('nonsuccess_ape_per_head', e.target.value)} 
+                   variant={isTraining ? 'readonly' : 'default'}
+                 />
+                 <InputField label="Total APE (Non-Success)" type="number"
+                   value={formData.nonsuccess_total_ape || ''} onChange={(e) => handleInputChange('nonsuccess_total_ape', e.target.value)} 
+                   variant={isCalc ? 'calculated' : 'default'}
+                   highlight={validationResult?.errors?.nonsuccess_total_ape}
+                 />
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-2xl shadow-sm border border-blue-200">
+               <SectionHeader title="สรุปผลรวม" color="blue" icon={Zap} />
+               <div className="space-y-4">
+                  <InputField label="Total APE (รวมทั้งหมด)" type="number" 
+                    value={formData.total_ape || ''} onChange={(e) => handleInputChange('total_ape', e.target.value)} 
+                    variant={isCalc ? 'calculated' : 'default'}
+                    highlight={validationResult?.errors?.total_ape}
+                  />
+                  <InputField label="% ACH Target" type="number" unit="%"
+                    value={formData.ach_target_percent || ''} onChange={(e) => handleInputChange('ach_target_percent', e.target.value)} 
+                    variant={isCalc ? 'calculated' : 'default'}
+                    highlight={validationResult?.errors?.ach_target_percent}
+                  />
+               </div>
+            </div>
+          </>
+        )}
+
+        {/* --- SALES ACTIVITY FORM --- */}
+        {formType === FORM_TYPES.SALES_ACTIVITY && (
+           <>
+             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                <SectionHeader title="ผลลัพธ์ (APE)" icon={Zap} />
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="flex gap-4">
+                     <div className="flex-1"><InputField label="APE Issue" type="number" value={formData.ape_issue || ''} onChange={(e) => handleInputChange('ape_issue', e.target.value)} variant={isTraining ? 'readonly' : 'default'}/></div>
+                     <div className="flex-1"><InputField label="APE Submit" type="number" value={formData.ape_submit || ''} onChange={(e) => handleInputChange('ape_submit', e.target.value)} variant={isTraining ? 'readonly' : 'default'}/></div>
+                  </div>
+                  <InputField label="Issue Rate (%)" type="number" unit="%" 
+                    value={formData.issue_rate || ''} onChange={(e) => handleInputChange('issue_rate', e.target.value)} 
+                    variant={isCalc ? 'calculated' : 'default'}
+                    highlight={validationResult?.errors?.issue_rate}
+                  />
+                  <InputField label="เบี้ยฯ เฉลี่ย / Case" type="number" 
+                     value={formData.avg_premium || ''} onChange={(e) => handleInputChange('avg_premium', e.target.value)} 
+                     variant={isCalc ? 'calculated' : (isTraining ? 'readonly' : 'default')}
+                  />
+                </div>
+             </div>
+
+             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                <SectionHeader title="Sales Funnel Conversion" color="indigo" icon={RefreshCw} />
+                <div className="space-y-2 relative">
+                   
+                   {/* Funnel Connector Line */}
+                   <div className="absolute left-[26px] top-6 bottom-6 w-0.5 bg-gray-200 z-0"></div>
+
+                   {/* Step 1 */}
+                   <div className="flex items-center gap-3 relative z-10">
+                      <div className="w-14 h-14 rounded-2xl bg-blue-50 border-2 border-blue-100 text-blue-800 flex flex-col items-center justify-center font-bold shadow-sm">
+                        <span className="text-[10px] text-blue-400 uppercase">Step</span>
+                        <span className="text-xl leading-none">1</span>
+                      </div>
+                      <div className="flex-1">
+                        <InputField label="Lead (ราย)" type="number" value={formData.leads || ''} onChange={(e) => handleInputChange('leads', e.target.value)} variant={isTraining ? 'readonly' : 'default'} />
+                      </div>
+                   </div>
+
+                   {/* Conversion 1-2 */}
+                   <div className="flex my-2">
+                      <div className="w-14 flex justify-center"><div className="bg-orange-100 text-orange-600 rounded-full p-1"><ChevronDown size={16}/></div></div>
+                      <div className="flex-1 pl-3">
+                         <div className="bg-orange-50 rounded-lg p-2 flex items-center gap-3 border border-orange-100">
+                            <span className="text-xs font-bold text-orange-700 whitespace-nowrap">Conv. Rate</span>
+                            <input 
+                              type="number" inputMode="decimal"
+                              placeholder="%"
+                              className={`w-full bg-white border border-orange-200 rounded px-2 py-1 text-center font-bold text-orange-800 outline-none ${validationResult?.errors?.conv_lead_meet ? 'border-red-500 bg-red-50' : ''}`}
+                              value={formData.conv_lead_meet || ''} 
+                              onChange={(e) => handleInputChange('conv_lead_meet', e.target.value)} 
+                              readOnly={isCalc}
+                            />
+                            <span className="text-xs text-orange-400">%</span>
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* Step 2 */}
+                   <div className="flex items-center gap-3 relative z-10">
+                      <div className="w-14 h-14 rounded-2xl bg-blue-50 border-2 border-blue-100 text-blue-800 flex flex-col items-center justify-center font-bold shadow-sm">
+                        <span className="text-[10px] text-blue-400 uppercase">Step</span>
+                        <span className="text-xl leading-none">2</span>
+                      </div>
+                      <div className="flex-1">
+                        <InputField label="ได้พบ (ราย)" type="number" value={formData.meets || ''} onChange={(e) => handleInputChange('meets', e.target.value)} variant={isTraining ? 'readonly' : 'default'} />
+                      </div>
+                   </div>
+
+                   {/* Conversion 2-3 */}
+                   <div className="flex my-2">
+                      <div className="w-14 flex justify-center"><div className="bg-orange-100 text-orange-600 rounded-full p-1"><ChevronDown size={16}/></div></div>
+                      <div className="flex-1 pl-3">
+                         <div className="bg-orange-50 rounded-lg p-2 flex items-center gap-3 border border-orange-100">
+                            <span className="text-xs font-bold text-orange-700 whitespace-nowrap">Conv. Rate</span>
+                            <input 
+                              type="number" inputMode="decimal" placeholder="%"
+                              className={`w-full bg-white border border-orange-200 rounded px-2 py-1 text-center font-bold text-orange-800 outline-none ${validationResult?.errors?.conv_meet_present ? 'border-red-500 bg-red-50' : ''}`}
+                              value={formData.conv_meet_present || ''} 
+                              onChange={(e) => handleInputChange('conv_meet_present', e.target.value)} 
+                              readOnly={isCalc}
+                            />
+                            <span className="text-xs text-orange-400">%</span>
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* Step 3 */}
+                   <div className="flex items-center gap-3 relative z-10">
+                      <div className="w-14 h-14 rounded-2xl bg-blue-50 border-2 border-blue-100 text-blue-800 flex flex-col items-center justify-center font-bold shadow-sm">
+                        <span className="text-[10px] text-blue-400 uppercase">Step</span>
+                        <span className="text-xl leading-none">3</span>
+                      </div>
+                      <div className="flex-1">
+                        <InputField label="นำเสนอ (ราย)" type="number" value={formData.presents || ''} onChange={(e) => handleInputChange('presents', e.target.value)} variant={isTraining ? 'readonly' : 'default'} />
+                      </div>
+                   </div>
+
+                    {/* Conversion 3-4 */}
+                   <div className="flex my-2">
+                      <div className="w-14 flex justify-center"><div className="bg-orange-100 text-orange-600 rounded-full p-1"><ChevronDown size={16}/></div></div>
+                      <div className="flex-1 pl-3">
+                         <div className="bg-orange-50 rounded-lg p-2 flex items-center gap-3 border border-orange-100">
+                            <span className="text-xs font-bold text-orange-700 whitespace-nowrap">Closing Rate</span>
+                            <input 
+                              type="number" inputMode="decimal" placeholder="%"
+                              className={`w-full bg-white border border-orange-200 rounded px-2 py-1 text-center font-bold text-orange-800 outline-none ${validationResult?.errors?.conv_present_close ? 'border-red-500 bg-red-50' : ''}`}
+                              value={formData.conv_present_close || ''} 
+                              onChange={(e) => handleInputChange('conv_present_close', e.target.value)} 
+                              readOnly={isCalc}
+                            />
+                            <span className="text-xs text-orange-400">%</span>
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* Step 4 */}
+                   <div className="flex items-center gap-3 relative z-10">
+                      <div className="w-14 h-14 rounded-2xl bg-green-500 text-white flex flex-col items-center justify-center font-bold shadow-md shadow-green-200">
+                        <span className="text-[10px] text-green-100 uppercase">Step</span>
+                        <span className="text-xl leading-none">4</span>
+                      </div>
+                      <div className="flex-1">
+                        <InputField label="ปิดการขาย (ราย)" type="number" value={formData.closes || ''} onChange={(e) => handleInputChange('closes', e.target.value)} variant={isTraining ? 'readonly' : 'default'} />
+                      </div>
+                   </div>
+
+                </div>
+             </div>
+           </>
+        )}
+
+      </div>
+
+      {/* Action Bar (Fixed Bottom) */}
+      <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-6 flex gap-3 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-30 max-w-full">
+        <div className="max-w-2xl mx-auto w-full flex gap-3">
+          {isTraining ? (
+             <button 
+               onClick={validateTraining}
+               className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-blue-200 flex justify-center items-center gap-2 transition active:scale-95"
+             >
+               <CheckCircle size={20}/> ตรวจคำตอบ
+             </button>
+          ) : (
+             <button 
+               onClick={() => alert("ข้อมูลถูกบันทึกเรียบร้อยแล้ว (Demo)")}
+               className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-green-200 flex justify-center items-center gap-2 transition active:scale-95"
+             >
+               <Save size={20}/> บันทึก
+             </button>
+          )}
+          
+          <button 
+             onClick={() => { 
+                if(confirm('ต้องการล้างค่าทั้งหมด?')) setFormData({}); 
+             }} 
+             className="bg-gray-100 text-gray-600 p-3.5 rounded-xl hover:bg-gray-200 border border-gray-200 transition"
+             title="Reset"
+           >
+             <RefreshCw size={24}/>
+           </button>
+        </div>
+      </div>
+
+      {/* Validation Modal (Popup) */}
+      {validationResult && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 animate-fade-in">
+            <div className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl animate-scale-up relative overflow-hidden">
+               {/* Decorative Circle */}
+               <div className={`absolute top-0 left-0 w-full h-2 ${validationResult.isCorrect ? 'bg-green-500' : 'bg-red-500'}`}></div>
+               
+               <div className="flex justify-center mb-6">
+                  {validationResult.isCorrect ? (
+                     <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center text-green-600 shadow-inner animate-bounce-subtle"><CheckCircle size={48}/></div>
+                  ) : (
+                     <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center text-red-600 shadow-inner animate-shake"><AlertCircle size={48}/></div>
+                  )}
+               </div>
+               
+               <h3 className={`text-2xl font-bold text-center mb-2 ${validationResult.isCorrect ? 'text-green-700' : 'text-red-700'}`}>
+                 {validationResult.isCorrect ? 'ยอดเยี่ยม! ถูกต้อง' : 'ยังไม่ถูกต้อง'}
+               </h3>
+               <p className="text-center text-gray-500 mb-6 text-sm">
+                 {validationResult.isCorrect ? 'คุณคำนวณได้อย่างแม่นยำ' : 'ลองตรวจสอบจุดที่ผิดแล้วแก้ไขอีกครั้ง'}
+               </p>
+               
+               {!validationResult.isCorrect && (
+                 <div className="bg-red-50 p-4 rounded-xl text-sm text-red-800 mb-6 max-h-48 overflow-y-auto border border-red-100 shadow-inner">
+                    <p className="font-bold mb-2 flex items-center gap-2"><Edit3 size={14}/> จุดที่ต้องแก้ไข:</p>
+                    <ul className="space-y-2">
+                       {Object.entries(validationResult.errors).map(([key, msg]) => (
+                          <li key={key} className="flex items-start gap-2 text-xs">
+                             <span className="mt-1 min-w-[6px] h-[6px] rounded-full bg-red-400"></span>
+                             <span>{msg}</span>
+                          </li>
+                       ))}
+                    </ul>
+                 </div>
+               )}
+
+               <button 
+                 onClick={() => setValidationResult(null)}
+                 className={`w-full py-3.5 rounded-xl font-bold text-white shadow-lg transition transform active:scale-95 ${validationResult.isCorrect ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-800 hover:bg-gray-900'}`}
+               >
+                 {validationResult.isCorrect ? 'ทำข้อต่อไป' : 'กลับไปแก้ไข'}
+               </button>
+            </div>
+         </div>
+      )}
+
+      {/* Global Styles */}
+      <style>{`
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scale-up { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+        @keyframes width { 0%, 100% { width: 0%; left: 0; } 50% { width: 100%; left: 0; } 100% { left: 100%; } }
+        .animate-fade-in { animation: fade-in 0.3s ease-out; }
+        .animate-fade-in-up { animation: fade-in-up 0.5s ease-out; }
+        .animate-scale-up { animation: scale-up 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .animate-shake { animation: shake 0.4s ease-in-out; }
+        .animate-bounce-subtle { animation: bounce-subtle 2s infinite; }
+        @keyframes bounce-subtle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+      `}</style>
+    </div>
+  );
+}
+
+
